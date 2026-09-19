@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useClusters, useLookups } from './hooks'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -911,6 +912,14 @@ function RelationshipDiagram({ evidence, need }: { evidence: typeof CLUSTERS[0][
 // ─── Shell ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  // Nexus Backend Integration (Ready for use when backend is live)
+  const { clusters: apiClusters, loading } = useClusters();
+  const { needs, priorities } = useLookups();
+  
+  useEffect(() => {
+    if (apiClusters.length > 0) console.log('Nexus API Clusters loaded:', apiClusters);
+  }, [apiClusters]);
+
   const [page, setPage] = useState<Page>('overview')
   const [selectedCluster, setSelectedCluster] = useState('NEX-007')
   const [showImport, setShowImport] = useState(false)
