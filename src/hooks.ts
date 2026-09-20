@@ -1,33 +1,31 @@
 import { useState, useEffect } from 'react';
-import { api, NeedCluster, Need, Priority } from './api';
+import { api, NeedCluster, Need, Priority, FusionCandidate } from './api';
 
 export function useClusters(params?: { status?: string; priority_id?: number }) {
   const [clusters, setClusters] = useState<NeedCluster[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  const fetchClusters = () => {
     setLoading(true);
-    
     api.getClusters(params)
       .then(res => {
-        if (isMounted) {
-          setClusters(res.results);
-          setError(null);
-        }
+        setClusters(res.results);
+        setError(null);
       })
       .catch(err => {
-        if (isMounted) setError(err.message);
+        setError(err.message);
       })
       .finally(() => {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       });
+  };
 
-    return () => { isMounted = false; };
+  useEffect(() => {
+    fetchClusters();
   }, [JSON.stringify(params)]);
 
-  return { clusters, loading, error };
+  return { clusters, loading, error, refetch: fetchClusters };
 }
 
 export function useClusterDetail(id: string) {
@@ -71,4 +69,29 @@ export function useLookups() {
   }, []);
 
   return { needs, priorities, loading };
+}
+
+export function useFusionCandidates() {
+  const [candidates, setCandidates] = useState<FusionCandidate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchCandidates = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getFusionCandidates();
+      setCandidates(data);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCandidates();
+  }, []);
+
+  return { candidates, loading, error, refetch: fetchCandidates };
 }

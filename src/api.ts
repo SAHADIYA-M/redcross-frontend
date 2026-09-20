@@ -1,5 +1,5 @@
 // API Client for RedCross Nexus
-// Based on the PostgreSQL + pgvector + Supabase backend architecture
+// Updated to match the FastAPI backend architecture
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -7,74 +7,79 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 
 export interface Need {
   id: number;
-  code: string; // e.g. WATER_SANITATION_AND_HYGIENE, HEALTH
+  code: string;
   name: string;
 }
 
 export interface Priority {
   id: number;
-  code: string; // CRITICAL, HIGH, MEDIUM, LOW
+  code: string;
   name: string;
-}
-
-export interface Location {
-  id: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-}
-
-export interface EvidenceFile {
-  id: string;
-  report_id: string;
-  file_url: string;
-  file_type: string; // image/jpeg, application/pdf
-  created_at: string;
 }
 
 export interface Report {
-  id: string;
-  raw_content: string;
-  source_type: string; // text, photo, structured
-  need_id: number;
-  location_id: string;
-  priority_id: number;
-  affected_population: string;
-  summary: string;
-  created_at: string;
-  evidence_files?: EvidenceFile[];
+  id?: string;
+  original_text: string;
+  reporter: string;
+  timestamp?: string;
+  location?: string;
+  incident?: string;
+  evidence?: string[];
+  source?: string;
+  status?: string;
+  needs?: string[];
+  severity?: string;
 }
 
-export interface ClusterReport {
-  report_id: string;
-  similarity_score: number;
-  report?: Report;
+export interface EvidenceItem {
+  id: string;
+  role: 'supports' | 'conflicts';
+  author: string;
+  time: string;
+  text: string;
 }
 
-export interface VerificationAction {
+export interface TimelineItem {
+  time: string;
   id: string;
-  action_type: 'confirm' | 'edit' | 'split' | 'reject';
-  notes?: string;
+  text: string;
+  level: string;
+}
+
+export interface FusionCandidate {
+  id: string;
+  type: 'POSSIBLE_DUPLICATE' | 'POSSIBLE_CONFLICT';
+  report_ids: string[];
+  cluster_id: string;
+  reason: string;
+  similarity?: number;
+  status: 'PENDING' | 'RESOLVED';
+  resolution?: 'MERGED' | 'KEPT_SEPARATE' | 'DISMISSED';
   created_at: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
 }
 
 export interface NeedCluster {
   id: string;
-  need_id: number;
-  location_id: string;
-  priority_id: number;
+  need: string;
+  location: string;
   status: 'REVIEW' | 'VERIFIED' | 'MONITOR' | 'REJECTED';
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  affected: string;
+  observations: number;
+  sources: number;
+  photos: number;
+  conflicts: number;
+  firstSeen: string;
+  lastUpdate: string;
+  consistent: boolean;
   summary: string;
-  confidence_score: number;
-  created_at: string;
-  updated_at: string;
-  
-  // Relations
-  need?: Need;
-  location?: Location;
-  priority?: Priority;
-  reports?: ClusterReport[];
-  verification_actions?: VerificationAction[];
+  fusionReasons: string[];
+  confidence: number;
+  evidence: EvidenceItem[];
+  timeline: TimelineItem[];
+  conflict: { prev: string; latest: string } | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -84,96 +89,123 @@ export interface PaginatedResponse<T> {
   previous: string | null;
 }
 
+// --- Fetch Wrapper ---
+async function fetchWithAuth(url: string | URL, options: RequestInit = {}) {
+  const token = localStorage.getItem('nexus_token');
+  const headers = new Headers(options.headers || {});
+  
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  
+  let res: Response;
+  try {
+    res = await fetch(url, { ...options, headers });
+  } catch (err) {
+    throw new Error('Network failure: Unable to reach backend API');
+  }
+  
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const errData = await res.json();
+      if (errData.detail) {
+        msg = Array.isArray(errData.detail) 
+          ? errData.detail.map((e: any) => `${e.loc.join('.')}: ${e.msg}`).join(', ') 
+          : errData.detail;
+      }
+    } catch (e) {
+      // JSON parse failed
+    }
+    
+    if (res.status === 401) {
+      throw new Error(`Authentication required (401). ${msg}`);
+    } else if (res.status === 403) {
+      throw new Error(`Permission denied (403). You lack the required role. ${msg}`);
+    } else if (res.status === 422) {
+      throw new Error(`Validation Error (422): ${msg}`);
+    } else if (res.status >= 500) {
+      throw new Error(`Server Error (${res.status}): The backend encountered an unexpected problem.`);
+    }
+    throw new Error(msg);
+  }
+  return res;
+}
+
 // --- API Methods ---
 
 export const api = {
+  login: async (
+    username = import.meta.env.VITE_DEV_ADMIN_USERNAME || 'dev_admin',
+    password = import.meta.env.VITE_DEV_ADMIN_PASSWORD || 'dev_admin_password'
+  ) => {
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    
+    if (!res.ok) throw new Error('Login failed');
+    const data = await res.json();
+    localStorage.setItem('nexus_token', data.access_token);
+    return data;
+  },
+
   // 1. Reports
   submitReport: async (data: Partial<Report>): Promise<Report> => {
-    const res = await fetch(`${API_BASE_URL}/reports`, {
+    const res = await fetchWithAuth(`${API_BASE_URL}/reports`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to submit report');
     return res.json();
   },
 
   getReportStatus: async (id: string): Promise<Report> => {
-    const res = await fetch(`${API_BASE_URL}/reports/${id}`);
-    if (!res.ok) throw new Error('Failed to fetch report status');
+    const res = await fetchWithAuth(`${API_BASE_URL}/reports/${id}`);
     return res.json();
   },
 
   // 2. Clusters
-  getClusters: async (params?: {
-    status?: string;
-    priority_id?: number;
-    need_id?: number;
-    location_id?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<PaginatedResponse<NeedCluster>> => {
+  getClusters: async (params?: Record<string, string | number>): Promise<PaginatedResponse<NeedCluster>> => {
     const url = new URL(`${API_BASE_URL}/clusters`);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined) url.searchParams.append(key, String(value));
       });
     }
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error('Failed to fetch clusters');
+    const res = await fetchWithAuth(url.toString());
     return res.json();
   },
 
   getClusterDetail: async (id: string): Promise<NeedCluster> => {
-    const res = await fetch(`${API_BASE_URL}/clusters/${id}`);
-    if (!res.ok) throw new Error('Failed to fetch cluster detail');
-    return res.json();
-  },
-
-  verifyCluster: async (id: string, data: { action_type: 'confirm' | 'edit' | 'reject'; notes?: string }): Promise<VerificationAction> => {
-    const res = await fetch(`${API_BASE_URL}/clusters/${id}/verification`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to verify cluster');
-    return res.json();
-  },
-
-  splitCluster: async (id: string, data: { report_ids: string[]; new_summary: string }): Promise<NeedCluster> => {
-    const res = await fetch(`${API_BASE_URL}/clusters/${id}/split`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to split cluster');
+    const res = await fetchWithAuth(`${API_BASE_URL}/clusters/${id}`);
     return res.json();
   },
 
   // 3. Lookups
   getNeeds: async (): Promise<Need[]> => {
-    const res = await fetch(`${API_BASE_URL}/needs`);
-    if (!res.ok) throw new Error('Failed to fetch needs');
+    const res = await fetchWithAuth(`${API_BASE_URL}/needs`);
     return res.json();
   },
 
   getPriorities: async (): Promise<Priority[]> => {
-    const res = await fetch(`${API_BASE_URL}/priorities`);
-    if (!res.ok) throw new Error('Failed to fetch priorities');
+    const res = await fetchWithAuth(`${API_BASE_URL}/priorities`);
     return res.json();
   },
-};
 
-// --- Storage Helper (Supabase integration mock for evidence uploads) ---
-// Assuming usage of @supabase/supabase-js in the future
-export const storage = {
-  uploadEvidence: async (file: File): Promise<string> => {
-    // In a real implementation:
-    // const { data, error } = await supabase.storage.from('evidence_files').upload(`public/${file.name}`, file);
-    // return data.path;
-    
-    // Mock response for now
-    console.log('Uploading file to Supabase storage...', file.name);
-    return Promise.resolve(`https://mock-supabase-url.com/storage/v1/object/public/evidence_files/${file.name}`);
+  // 4. Fusion
+  getFusionCandidates: async (): Promise<FusionCandidate[]> => {
+    const res = await fetchWithAuth(`${API_BASE_URL}/fusion`);
+    return res.json();
+  },
+
+  resolveFusionCandidate: async (id: string, action: 'MERGED' | 'KEPT_SEPARATE' | 'DISMISSED'): Promise<FusionCandidate> => {
+    const res = await fetchWithAuth(`${API_BASE_URL}/fusion/${id}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    return res.json();
   }
 };

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useClusters, useLookups } from './hooks'
+import { api } from './api';
+import { useClusters, useLookups, useFusionCandidates } from './hooks'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -433,66 +434,105 @@ function Overview({ setPage, setSelectedCluster }: { setPage: (p: Page) => void;
 
 // ─── Fusion Queue ─────────────────────────────────────────────────────────────
 
-function FusionQueue() {
-  const [filter, setFilter] = useState<FusionFilter>('All')
-  const filters: FusionFilter[] = ['All', 'Possible Match', 'Duplicate', 'Conflict']
-  const typeMap: Record<string, FusionFilter> = { match: 'Possible Match', duplicate: 'Duplicate', conflict: 'Conflict' }
-  const visible = FUSION_ITEMS.filter(f => filter === 'All' || typeMap[f.type] === filter)
+function FusionQueue({ candidates, onResolved }: { candidates: import('./api').FusionCandidate[], onResolved: () => void }) {
+  const [resolving, setResolving] = useState<string | null>(null);
+
+  const handleResolve = async (id: string, action: 'MERGED' | 'KEPT_SEPARATE' | 'DISMISSED') => {
+    try {
+      setResolving(id);
+      await api.resolveFusionCandidate(id, action);
+      onResolved();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setResolving(null);
+    }
+  };
+
+  const pending = candidates.filter(c => c.status === 'PENDING');
 
   return (
-    <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto w-full">
-      <div className="mb-6">
+    <div className="space-y-6">
+      <div>
         <h1 className="text-xl font-semibold text-gray-900">Fusion Queue</h1>
         <p className="text-sm text-gray-400 mt-1">Review relationships detected between observations.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Left: filters panel */}
-        <div className="lg:col-span-1">
-          <div className="border border-[#E4E7EC] bg-white rounded-xl p-4 sticky top-[68px]">
-            <SectionLabel>Filter by type</SectionLabel>
-            <div className="space-y-1">
-              {filters.map(f => {
-                const count = f === 'All' ? FUSION_ITEMS.length : FUSION_ITEMS.filter(i => typeMap[i.type] === f).length
-                return (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${filter === f ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+      {pending.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">
+          No fusion candidates require review.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {pending.map((c) => (
+            <div key={c.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${c.type === 'POSSIBLE_DUPLICATE' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                    {c.type === 'POSSIBLE_DUPLICATE' ? 'Possible Duplicate' : 'Possible Conflict'}
+                  </span>
+                  <span className="text-sm text-gray-500">Cluster {c.cluster_id}</span>
+                </div>
+                <span className="text-xs text-gray-400 font-mono">{c.id}</span>
+              </div>
+              
+              <div className="p-4 space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900 mb-1">Reason:</h3>
+                  <p className="text-sm text-gray-600">{c.reason}</p>
+                </div>
+
+                {c.similarity !== undefined && c.similarity !== null && (
+                  <div className="bg-gray-50 rounded p-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Similarity:</span>
+                      <span className="font-medium">{c.similarity.toFixed(2)} (Threshold: 0.60)</span>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">Reports:</h3>
+                  <div className="space-y-2">
+                    {c.report_ids.map((id) => (
+                      <div key={id} className="text-sm text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 font-mono">
+                        {id}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex gap-2">
+                  <button 
+                    onClick={() => handleResolve(c.id, 'MERGED')}
+                    disabled={resolving === c.id}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
                   >
-                    <span>{f}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${filter === f ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>{count}</span>
+                    Merge
                   </button>
-                )
-              })}
+                  <button 
+                    onClick={() => handleResolve(c.id, 'KEPT_SEPARATE')}
+                    disabled={resolving === c.id}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    Keep Separate
+                  </button>
+                  <button 
+                    onClick={() => handleResolve(c.id, 'DISMISSED')}
+                    disabled={resolving === c.id}
+                    className="px-3 py-1.5 text-gray-500 hover:text-gray-700 rounded text-sm disabled:opacity-50"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
             </div>
-
-            <div className="mt-5 pt-4 border-t border-[#E4E7EC] space-y-3">
-              <SectionLabel>More filters</SectionLabel>
-              {['Need type', 'Location', 'Time', 'Confidence'].map(f => (
-                <button key={f} className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-100 transition-colors border border-[#E4E7EC]">
-                  <span>{f}</span>
-                  <span className="text-gray-400">▾</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          ))}
         </div>
-
-        {/* Right: cards */}
-        <div className="lg:col-span-3 space-y-4">
-          {visible.map(item => {
-            if (item.type === 'match') return <MatchCard key={item.id} item={item} />
-            if (item.type === 'duplicate') return <DuplicateCard key={item.id} item={item} />
-            if (item.type === 'conflict') return <ConflictCard key={item.id} item={item} />
-            return null
-          })}
-        </div>
-      </div>
+      )}
     </div>
-  )
+  );
 }
-
 function MatchCard({ item }: { item: typeof FUSION_ITEMS[0] }) {
   return (
     <div className="border border-[#E4E7EC] bg-white rounded-xl overflow-hidden">
@@ -912,6 +952,7 @@ function RelationshipDiagram({ evidence, need }: { evidence: typeof CLUSTERS[0][
 // ─── Shell ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const { candidates: fusionCandidates, refetch: refetchFusion } = useFusionCandidates();
   // Nexus Backend Integration (Ready for use when backend is live)
   const { clusters: apiClusters, loading } = useClusters();
   const { needs, priorities } = useLookups();
@@ -925,7 +966,7 @@ export default function App() {
   const [showImport, setShowImport] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
-  const pendingFusion = FUSION_ITEMS.length
+  const pendingFusion = fusionCandidates.filter(c => c.status === "PENDING").length
   const clusterCount = CLUSTERS.length
 
   const navItems = [
@@ -1017,7 +1058,7 @@ export default function App() {
       {/* Page */}
       <main className="overflow-x-hidden">
         {page === 'overview' && <Overview setPage={setPage} setSelectedCluster={setSelectedCluster} />}
-        {page === 'fusion' && <FusionQueue />}
+        {page === 'fusion' && <FusionQueue candidates={fusionCandidates} onResolved={refetchFusion} />}
         {page === 'clusters' && <ClustersPage setPage={setPage} setSelectedCluster={setSelectedCluster} />}
         {page === 'cluster-detail' && <ClusterDetail clusterId={selectedCluster} setPage={setPage} />}
       </main>
