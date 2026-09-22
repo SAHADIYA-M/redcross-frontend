@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { api } from './api';
-import { useClusters, useLookups, useFusionCandidates } from './hooks'
+import { api, NeedCluster, EvidenceItem, FusionCandidate } from './api';
+import { useClusters, useLookups, useFusionCandidates, useReport } from './hooks'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -10,168 +10,10 @@ type VerifyState = 'pending' | 'confirmed' | 'rejected'
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
-const CLUSTERS = [
-  {
-    id: 'NEX-007',
-    need: 'Drinking Water Shortage',
-    location: 'Government UP School',
-    status: 'REVIEW' as const,
-    priority: 'HIGH' as const,
-    affected: '40–45 families',
-    observations: 5,
-    sources: 3,
-    photos: 1,
-    conflicts: 1,
-    firstSeen: '10:32 AM',
-    lastUpdate: '11:16 AM',
-    consistent: false,
-    summary: 'Multiple field observations indicate a drinking-water shortage around Government UP School.',
-    fusionReasons: [
-      'Same need type',
-      'Same geographic area',
-      'Reports within 44 minutes',
-      'Similar affected population',
-      '3 independent observations',
-    ],
-    confidence: 91,
-    evidence: [
-      { id: 'REPORT #021', role: 'supports' as const, author: 'Field volunteer', time: '10:32 AM', text: '"No drinking water available near school."' },
-      { id: 'REPORT #034', role: 'supports' as const, author: 'Volunteer Team B', time: '10:41 AM', text: '"40 families waiting for water near the relief centre."' },
-      { id: 'REPORT #038', role: 'supports' as const, author: 'Field Team C', time: '10:58 AM', text: '"Water tanker delayed — families still without access."' },
-      { id: 'REPORT #045', role: 'conflicts' as const, author: 'Field Team D', time: '11:14 AM', text: '"Tanker arrived at 11:14. Distribution underway."' },
-      { id: 'PHOTO #008', role: 'supports' as const, author: 'Photo evidence', time: '11:16 AM', text: 'AI observation: Empty water containers visible. Tanker present.' },
-    ],
-    timeline: [
-      { time: '10:32', id: 'Report #021', text: 'Water unavailable', level: 'high' },
-      { time: '10:41', id: 'Report #034', text: '40 families affected', level: 'high' },
-      { time: '10:58', id: 'Report #038', text: 'Tanker delayed', level: 'mid' },
-      { time: '11:14', id: 'Report #045', text: 'Tanker reportedly arrived', level: 'conflict' },
-      { time: '11:16', id: 'Photo #008', text: 'Supporting photograph', level: 'photo' },
-    ],
-    conflict: {
-      prev: '"No drinking water available."',
-      latest: '"Tanker arrived at 11:14."',
-    },
-  },
-  {
-    id: 'NEX-006',
-    need: 'Shelter Damage',
-    location: 'Ward 4',
-    status: 'VERIFIED' as const,
-    priority: 'HIGH' as const,
-    affected: '12 families',
-    observations: 4,
-    sources: 2,
-    photos: 0,
-    conflicts: 0,
-    firstSeen: '09:15 AM',
-    lastUpdate: '10:22 AM',
-    consistent: true,
-    summary: 'Structural damage to residential buildings in Ward 4 displacing 12 families.',
-    fusionReasons: ['Same need type', 'Same ward', 'Consistent population estimate', '2 independent sources'],
-    confidence: 84,
-    evidence: [
-      { id: 'REPORT #018', role: 'supports' as const, author: 'Field Team A', time: '09:15 AM', text: '"12 houses damaged in Ward 4."' },
-      { id: 'REPORT #019', role: 'supports' as const, author: 'Volunteer Team E', time: '09:22 AM', text: '"12 homes damaged. Families need temporary shelter."' },
-    ],
-    timeline: [
-      { time: '09:15', id: 'Report #018', text: '12 houses damaged', level: 'high' },
-      { time: '09:22', id: 'Report #019', text: 'Families need shelter', level: 'high' },
-    ],
-    conflict: null,
-  },
-  {
-    id: 'NEX-005',
-    need: 'Medical Assistance',
-    location: 'Relief Centre',
-    status: 'REVIEW' as const,
-    priority: 'HIGH' as const,
-    affected: '8 people',
-    observations: 3,
-    sources: 2,
-    photos: 0,
-    conflicts: 0,
-    firstSeen: '11:02 AM',
-    lastUpdate: '11:30 AM',
-    consistent: true,
-    summary: 'Medical supplies running low; injured persons require immediate assistance at the relief centre.',
-    fusionReasons: ['Same location', 'Same need type', 'Reports within 30 minutes'],
-    confidence: 78,
-    evidence: [
-      { id: 'REPORT #041', role: 'supports' as const, author: 'Volunteer Team F', time: '11:02 AM', text: '"Medical supplies critically low. 8 people need attention."' },
-    ],
-    timeline: [
-      { time: '11:02', id: 'Report #041', text: 'Medical supplies low', level: 'high' },
-      { time: '11:30', id: 'Report #047', text: 'Situation unchanged', level: 'mid' },
-    ],
-    conflict: null,
-  },
-  {
-    id: 'NEX-004',
-    need: 'Road Access',
-    location: 'Ward 2',
-    status: 'MONITOR' as const,
-    priority: 'MEDIUM' as const,
-    affected: 'Unknown',
-    observations: 3,
-    sources: 2,
-    photos: 0,
-    conflicts: 0,
-    firstSeen: '10:10 AM',
-    lastUpdate: '10:55 AM',
-    consistent: true,
-    summary: 'Road blockage in Ward 2 limiting access for emergency vehicles.',
-    fusionReasons: ['Same road segment', 'Consistent description'],
-    confidence: 69,
-    evidence: [
-      { id: 'REPORT #029', role: 'supports' as const, author: 'Field Team G', time: '10:10 AM', text: '"Main road blocked by fallen trees near Ward 2 junction."' },
-    ],
-    timeline: [
-      { time: '10:10', id: 'Report #029', text: 'Road blocked', level: 'mid' },
-    ],
-    conflict: null,
-  },
-]
-
-const FUSION_ITEMS = [
-  {
-    type: 'match' as const,
-    id: 'F-001',
-    confidence: 91,
-    a: { id: 'Report #021', text: '"No water near the school."', location: 'Same area', time: '10:32' },
-    b: { id: 'Report #034', text: '"40 families waiting for water near the relief centre."', location: 'Same area', time: '10:41' },
-    scores: [{ label: 'Semantic match', value: 92 }, { label: 'Location match', value: 87 }, { label: 'Time proximity', value: 94 }],
-  },
-  {
-    type: 'conflict' as const,
-    id: 'F-002',
-    confidence: null,
-    a: { id: 'Report #041', text: '"Tanker has not arrived."', location: 'Relief Centre', time: '11:02' },
-    b: { id: 'Report #045', text: '"Tanker arrived at 11:14."', location: 'Relief Centre', time: '11:14' },
-    scores: [],
-    note: 'Same location · Same need · Conflicting status',
-  },
-  {
-    type: 'duplicate' as const,
-    id: 'F-003',
-    confidence: 96,
-    a: { id: 'Report #018', text: '"12 houses damaged."', location: 'Ward 4', time: '09:15' },
-    b: { id: 'Report #019', text: '"12 homes damaged in Ward 4."', location: 'Ward 4', time: '09:22' },
-    scores: [],
-  },
-  {
-    type: 'match' as const,
-    id: 'F-004',
-    confidence: 74,
-    a: { id: 'Report #029', text: '"Road blocked near Ward 2 junction."', location: 'Ward 2', time: '10:10' },
-    b: { id: 'Report #033', text: '"Emergency vehicles unable to pass Ward 2."', location: 'Ward 2', time: '10:28' },
-    scores: [{ label: 'Semantic match', value: 68 }, { label: 'Location match', value: 92 }, { label: 'Time proximity', value: 81 }],
-  },
-]
-
 // ─── Small components ─────────────────────────────────────────────────────────
 
-function StatusDot({ status }: { status: 'REVIEW' | 'VERIFIED' | 'MONITOR' }) {
+function StatusDot({ status }: { status: 'REVIEW' | 'VERIFIED' | 'MONITOR' | 'REJECTED' }) {
+  if (status === 'REJECTED') return <span className={`inline-block w-2 h-2 rounded-full bg-gray-400 shrink-0 mt-0.5`} />;
   const map = { REVIEW: 'bg-red-500', VERIFIED: 'bg-emerald-500', MONITOR: 'bg-amber-400' }
   return <span className={`inline-block w-2 h-2 rounded-full ${map[status]} shrink-0 mt-0.5`} />
 }
@@ -263,7 +105,7 @@ function ImportModal({ onClose, onProcess }: { onClose: () => void; onProcess: (
               {step === 'done' ? 'Processing complete' : 'Processing observations…'}
             </div>
             <div className="space-y-2.5 mb-6">
-              {steps.map((s, i) => (
+              {steps.map((s: string, i: number) => (
                 <div key={s} className="flex items-center gap-2.5 text-sm">
                   {step === 'done' || i < progress
                     ? <span className="text-emerald-500 font-bold text-base leading-none">✓</span>
@@ -294,7 +136,8 @@ function ImportModal({ onClose, onProcess }: { onClose: () => void; onProcess: (
 
 // ─── Overview ─────────────────────────────────────────────────────────────────
 
-function Overview({ setPage, setSelectedCluster }: { setPage: (p: Page) => void; setSelectedCluster: (id: string) => void }) {
+function Overview({ setPage, setSelectedCluster, clusters, loading }: { setPage: (p: Page) => void; setSelectedCluster: (id: string) => void; clusters: NeedCluster[]; loading: boolean; }) {
+
   return (
     <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto w-full">
       {/* Page header */}
@@ -330,7 +173,7 @@ function Overview({ setPage, setSelectedCluster }: { setPage: (p: Page) => void;
         {/* Left: cluster cards (2/3 width) */}
         <div className="lg:col-span-2 space-y-3">
           <SectionLabel>What Nexus Found</SectionLabel>
-          {CLUSTERS.map(c => (
+          {clusters.map(c => (
             <button
               key={c.id}
               onClick={() => { setSelectedCluster(c.id); setPage('cluster-detail') }}
@@ -394,9 +237,9 @@ function Overview({ setPage, setSelectedCluster }: { setPage: (p: Page) => void;
             <SectionLabel>Cluster status</SectionLabel>
             <div className="border border-[#E4E7EC] bg-white rounded-xl overflow-hidden divide-y divide-[#E4E7EC]">
               {[
-                { label: 'Awaiting review', count: CLUSTERS.filter(c => c.status === 'REVIEW').length, color: 'bg-red-500' },
-                { label: 'Verified', count: CLUSTERS.filter(c => c.status === 'VERIFIED').length, color: 'bg-emerald-500' },
-                { label: 'Monitoring', count: CLUSTERS.filter(c => c.status === 'MONITOR').length, color: 'bg-amber-400' },
+                { label: 'Awaiting review', count: clusters.filter(c => c.status === 'REVIEW').length, color: 'bg-red-500' },
+                { label: 'Verified', count: clusters.filter(c => c.status === 'VERIFIED').length, color: 'bg-emerald-500' },
+                { label: 'Monitoring', count: clusters.filter(c => c.status === 'MONITOR').length, color: 'bg-amber-400' },
               ].map(row => (
                 <div key={row.label} className="flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-2.5 text-sm text-gray-600">
@@ -413,7 +256,8 @@ function Overview({ setPage, setSelectedCluster }: { setPage: (p: Page) => void;
           <div>
             <SectionLabel>AI confidence</SectionLabel>
             <div className="border border-[#E4E7EC] bg-white rounded-xl px-4 py-4 space-y-3">
-              {CLUSTERS.map(c => (
+              {clusters.length === 0 && !loading && <div className="text-sm text-gray-500 py-4 px-4 text-center border-t border-[#E4E7EC]">No clusters found.</div>}
+              {clusters.slice(0, 5).map(c => (
                 <div key={c.id}>
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="text-gray-500 truncate pr-2">{c.need.split(' ').slice(0, 2).join(' ')}</span>
@@ -533,117 +377,86 @@ function FusionQueue({ candidates, onResolved }: { candidates: import('./api').F
     </div>
   );
 }
-function MatchCard({ item }: { item: typeof FUSION_ITEMS[0] }) {
+function ReportPreview({ id, label }: { id: string, label: string }) {
+  const { report, loading } = useReport(id);
+  if (loading) return <div className="text-xs text-gray-400">Loading {id}...</div>;
+  if (!report) return <div className="text-xs text-red-400">Failed to load {id}</div>;
+  
   return (
-    <div className="border border-[#E4E7EC] bg-white rounded-xl overflow-hidden">
-      <div className="px-5 py-3 border-b border-[#E4E7EC] flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-          <span>🔗</span> Possible same situation
-        </div>
-        {item.confidence && (
-          <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">{item.confidence}% match</span>
-        )}
+    <div className="text-sm bg-white border border-[#E4E7EC] rounded-lg p-3">
+      <div className="font-medium text-gray-700 mb-1">{report.reporter}</div>
+      <div className="text-gray-500 mb-2">"{report.original_text}"</div>
+      <div className="flex flex-wrap gap-2 text-xs mt-3">
+        {report.severity && <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-medium">Severity: {report.severity}</span>}
+        {report.affected_population && <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-medium">Affected: {report.affected_population}</span>}
+        {report.location_status && <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md font-medium">Location: {report.location_status}</span>}
+        {report.infrastructure_status && <span className="bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-md font-medium">Infra: {report.infrastructure_status}</span>}
+        {report.time_sensitivity && <span className="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md font-medium">Time: {report.time_sensitivity}</span>}
+        {report.needs && report.needs.map((n: string) => <span key={n} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-medium">{n}</span>)}
+        {report.vulnerability && report.vulnerability.map((v: string) => <span key={v} className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-md font-medium">{v}</span>)}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 sm:divide-x divide-[#E4E7EC]">
-        {[item.a, item.b].map((side, i) => (
-          <div key={i} className={`px-5 py-4 ${i === 0 ? 'border-b sm:border-b-0 border-[#E4E7EC]' : ''}`}>
-            <div className="text-xs font-mono font-semibold text-gray-400 mb-1">{side.id}</div>
-            <div className="text-sm text-gray-700 leading-relaxed">{side.text}</div>
-            <div className="flex items-center gap-3 mt-2.5 text-xs text-gray-400">
-              <span>📍 {side.location}</span>
-              <span>🕐 {side.time}</span>
-            </div>
-          </div>
-        ))}
+    </div>
+  );
+}
+
+function MatchCard({ candidate }: { candidate: FusionCandidate }) {
+  return (
+    <div className="px-5 py-4">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded">MATCH</div>
+        <div className="text-sm text-gray-900 font-medium">{candidate.reason}</div>
+        <div className="ml-auto text-emerald-600 text-sm font-semibold">{candidate.similarity ? Math.round(candidate.similarity * 100) : '--'}%</div>
       </div>
-      {item.scores.length > 0 && (
-        <div className="border-t border-[#E4E7EC] px-5 py-3.5 flex flex-wrap gap-x-6 gap-y-2">
-          {item.scores.map(s => (
-            <div key={s.label} className="flex items-center gap-2 text-xs">
-              <span className="text-gray-400 w-24">{s.label}</span>
-              <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-gray-600 rounded-full" style={{ width: `${s.value}%` }} />
-              </div>
-              <span className="font-medium text-gray-600 tabular-nums">{s.value}%</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="border-t border-[#E4E7EC] px-5 py-3 flex gap-2">
-        <button className="text-sm text-gray-600 border border-[#E4E7EC] px-4 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">View evidence</button>
-        <button className="text-sm text-gray-900 bg-gray-100 px-4 py-1.5 rounded-lg hover:bg-gray-200 transition-colors font-medium">Merge into cluster</button>
+      <div className="grid grid-cols-2 gap-4 mt-4">
+        <ReportPreview id={candidate.report_ids[0]} label="A" />
+        <ReportPreview id={candidate.report_ids[1]} label="B" />
       </div>
     </div>
   )
 }
 
-function DuplicateCard({ item }: { item: typeof FUSION_ITEMS[0] }) {
+function DuplicateCard({ candidate }: { candidate: FusionCandidate }) {
   return (
-    <div className="border border-[#E4E7EC] bg-white rounded-xl overflow-hidden">
-      <div className="px-5 py-3 border-b border-[#E4E7EC] flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-          <span>🔁</span> Possible duplicate
-        </div>
-        {item.confidence && (
-          <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">Similarity: {item.confidence}%</span>
-        )}
+    <div className="px-5 py-4">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">DUPLICATE</div>
+        <div className="text-sm text-gray-900 font-medium">{candidate.reason}</div>
       </div>
-      <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {[item.a, item.b].map((side, i) => (
-          <div key={i} className="border border-[#E4E7EC] rounded-lg px-3 py-3">
-            <div className="text-xs font-mono font-semibold text-gray-400 mb-1">{side.id}</div>
-            <div className="text-sm text-gray-700">{side.text}</div>
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-[#E4E7EC] px-5 py-3 flex gap-2">
-        <button className="text-sm text-gray-900 bg-gray-100 px-4 py-1.5 rounded-lg hover:bg-gray-200 transition-colors font-medium">Merge</button>
-        <button className="text-sm text-gray-600 border border-[#E4E7EC] px-4 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">Keep separate</button>
+      <div className="grid grid-cols-2 gap-4 mt-4">
+        <ReportPreview id={candidate.report_ids[0]} label="A" />
+        <ReportPreview id={candidate.report_ids[1]} label="B" />
       </div>
     </div>
   )
 }
 
-function ConflictCard({ item }: { item: typeof FUSION_ITEMS[0] }) {
+function ConflictCard({ candidate }: { candidate: FusionCandidate }) {
   return (
-    <div className="border border-amber-200 bg-white rounded-xl overflow-hidden">
-      <div className="px-5 py-3 border-b border-amber-200 bg-amber-50 flex items-center gap-2">
-        <span>⚠</span>
-        <span className="text-sm font-semibold text-amber-800">Conflict detected</span>
+    <div className="px-5 py-4">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-1 rounded">CONFLICT</div>
+        <div className="text-sm text-gray-900 font-medium">{candidate.reason}</div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr]">
-        <div className="px-5 py-4 border-b sm:border-b-0 sm:border-r border-[#E4E7EC]">
-          <div className="text-xs font-mono font-semibold text-gray-400 mb-1">{item.a.id}</div>
-          <div className="text-sm text-gray-700">{item.a.text}</div>
-          <div className="text-xs text-gray-400 mt-1.5">🕐 {item.a.time}</div>
-        </div>
-        <div className="hidden sm:flex px-4 py-4 text-xs font-bold text-gray-400 items-center justify-center">VS</div>
-        <div className="sm:hidden px-5 py-2 text-xs font-bold text-gray-400 text-center border-b border-[#E4E7EC]">VS</div>
-        <div className="px-5 py-4">
-          <div className="text-xs font-mono font-semibold text-gray-400 mb-1">{item.b.id}</div>
-          <div className="text-sm text-gray-700">{item.b.text}</div>
-          <div className="text-xs text-gray-400 mt-1.5">🕐 {item.b.time}</div>
-        </div>
-      </div>
-      {'note' in item && item.note && (
-        <div className="px-5 py-2 border-t border-[#E4E7EC] text-xs text-gray-400">{item.note as string}</div>
-      )}
-      <div className="border-t border-[#E4E7EC] px-5 py-3">
-        <button className="text-sm text-amber-700 bg-amber-50 border border-amber-200 px-4 py-1.5 rounded-lg hover:bg-amber-100 transition-colors font-medium">Investigate</button>
+      <div className="grid grid-cols-2 gap-4 mt-4">
+        <ReportPreview id={candidate.report_ids[0]} label="A" />
+        <ReportPreview id={candidate.report_ids[1]} label="B" />
       </div>
     </div>
   )
 }
+
+
 
 // ─── Clusters page ────────────────────────────────────────────────────────────
 
-function ClustersPage({ setPage, setSelectedCluster }: { setPage: (p: Page) => void; setSelectedCluster: (id: string) => void }) {
+function ClustersPage({ setPage, setSelectedCluster, clusters, loading }: { setPage: (p: Page) => void; setSelectedCluster: (id: string) => void; clusters: NeedCluster[]; loading: boolean; }) {
+
   return (
     <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto w-full">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Need Clusters</h1>
-          <p className="text-sm text-gray-400 mt-1">Consolidated situations created from multiple observations. {CLUSTERS.length} clusters.</p>
+          <p className="text-sm text-gray-400 mt-1">Consolidated situations created from multiple observations. {clusters.length} clusters.</p>
         </div>
       </div>
 
@@ -654,11 +467,11 @@ function ClustersPage({ setPage, setSelectedCluster }: { setPage: (p: Page) => v
             <div key={h} className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{h}</div>
           ))}
         </div>
-        {CLUSTERS.map((c, idx) => (
+        {loading ? <div className="py-20 text-center text-gray-400">Loading clusters...</div> : clusters.length === 0 ? <div className="py-20 text-center text-gray-400">No clusters found.</div> : clusters.map((c, idx) => (
           <button
             key={c.id}
             onClick={() => { setSelectedCluster(c.id); setPage('cluster-detail') }}
-            className={`w-full text-left grid grid-cols-[100px_1fr_160px_130px_110px] gap-4 px-5 py-4 hover:bg-gray-50 transition-colors group ${idx < CLUSTERS.length - 1 ? 'border-b border-[#E4E7EC]' : ''}`}
+            className={`w-full text-left grid grid-cols-[100px_1fr_160px_130px_110px] gap-4 px-5 py-4 hover:bg-gray-50 transition-colors group ${idx < clusters.length - 1 ? 'border-b border-[#E4E7EC]' : ''}`}
           >
             <div className="flex items-center gap-2">
               <StatusDot status={c.status} />
@@ -688,7 +501,7 @@ function ClustersPage({ setPage, setSelectedCluster }: { setPage: (p: Page) => v
 
       {/* Mobile cards */}
       <div className="md:hidden space-y-3">
-        {CLUSTERS.map(c => (
+        {clusters.map(c => (
           <button
             key={c.id}
             onClick={() => { setSelectedCluster(c.id); setPage('cluster-detail') }}
@@ -716,9 +529,14 @@ function ClustersPage({ setPage, setSelectedCluster }: { setPage: (p: Page) => v
 
 // ─── Cluster Detail ───────────────────────────────────────────────────────────
 
+import { useClusterDetail } from './hooks';
+
 function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p: Page) => void }) {
-  const cluster = CLUSTERS.find(c => c.id === clusterId) ?? CLUSTERS[0]
+  const { cluster, loading, error } = useClusterDetail(clusterId);
   const [verifyState, setVerifyState] = useState<VerifyState>('pending')
+
+  if (loading) return <div className="px-6 lg:px-10 py-20 text-center text-gray-400 max-w-[1400px] mx-auto">Loading cluster details...</div>;
+  if (error || !cluster) return <div className="px-6 lg:px-10 py-20 text-center text-red-400 max-w-[1400px] mx-auto">{error || 'Cluster not found'}</div>;
 
   return (
     <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto w-full">
@@ -914,7 +732,7 @@ function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p:
   )
 }
 
-function RelationshipDiagram({ evidence, need }: { evidence: typeof CLUSTERS[0]['evidence']; need: string }) {
+function RelationshipDiagram({ evidence, need }: { evidence: EvidenceItem[]; need: string }) {
   const supporters = evidence.filter(e => e.role === 'supports')
   const conflicts = evidence.filter(e => e.role === 'conflicts')
   return (
@@ -952,6 +770,16 @@ function RelationshipDiagram({ evidence, need }: { evidence: typeof CLUSTERS[0][
 // ─── Shell ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    if (!localStorage.getItem('nexus_token')) {
+      api.login().then(() => setAuthReady(true)).catch(console.error);
+    } else {
+      setAuthReady(true);
+    }
+  }, []);
+
+  if (!authReady) return <div className="flex h-screen items-center justify-center text-sm text-gray-500">Authenticating...</div>;
   const { candidates: fusionCandidates, refetch: refetchFusion } = useFusionCandidates();
   // Nexus Backend Integration (Ready for use when backend is live)
   const { clusters: apiClusters, loading } = useClusters();
@@ -967,7 +795,7 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const pendingFusion = fusionCandidates.filter(c => c.status === "PENDING").length
-  const clusterCount = CLUSTERS.length
+  const clusterCount = apiClusters.length
 
   const navItems = [
     { id: 'overview' as Page, label: 'Overview' },
@@ -1057,9 +885,9 @@ export default function App() {
 
       {/* Page */}
       <main className="overflow-x-hidden">
-        {page === 'overview' && <Overview setPage={setPage} setSelectedCluster={setSelectedCluster} />}
+        {page === 'overview' && <Overview setPage={setPage} setSelectedCluster={setSelectedCluster} clusters={apiClusters} loading={loading} />}
         {page === 'fusion' && <FusionQueue candidates={fusionCandidates} onResolved={refetchFusion} />}
-        {page === 'clusters' && <ClustersPage setPage={setPage} setSelectedCluster={setSelectedCluster} />}
+        {page === 'clusters' && <ClustersPage setPage={setPage} setSelectedCluster={setSelectedCluster} clusters={apiClusters} loading={loading} />}
         {page === 'cluster-detail' && <ClusterDetail clusterId={selectedCluster} setPage={setPage} />}
       </main>
 

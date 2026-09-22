@@ -29,6 +29,13 @@ export interface Report {
   status?: string;
   needs?: string[];
   severity?: string;
+  location_status?: string;
+  affected_population?: number;
+  infrastructure_status?: string;
+  available_needs?: string[];
+  vulnerability?: string[];
+  time_sensitivity?: string;
+  verification_status?: string;
 }
 
 export interface EvidenceItem {
