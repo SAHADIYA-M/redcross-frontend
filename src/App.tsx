@@ -154,11 +154,11 @@ function Overview({ setPage, setSelectedCluster, clusters, loading }: { setPage:
 
       {/* Metrics row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-        {[
-          { value: '15', label: 'Observations', sub: 'Raw inputs received' },
-          { value: '4',  label: 'Need Clusters', sub: 'Consolidated situations' },
-          { value: '2',  label: 'Need Review',   sub: 'Awaiting verification' },
-          { value: '3',  label: 'Conflicts',     sub: 'Evidence disagrees' },
+        {loading ? <div className="col-span-4 text-center py-10 text-gray-400">Loading metrics...</div> : [
+          { value: clusters.reduce((acc, c) => acc + c.observations, 0).toString(), label: 'Observations', sub: 'Raw inputs received' },
+          { value: clusters.length.toString(),  label: 'Need Clusters', sub: 'Consolidated situations' },
+          { value: clusters.filter(c => c.status === 'REVIEW').length.toString(),  label: 'Need Review',   sub: 'Awaiting verification' },
+          { value: clusters.reduce((acc, c) => acc + c.conflicts, 0).toString(),  label: 'Conflicts',     sub: 'Evidence disagrees' },
         ].map(m => (
           <div key={m.label} className="border border-[#E4E7EC] rounded-lg px-5 py-4 bg-white">
             <div className="text-2xl font-bold text-gray-900 tabular-nums">{m.value}</div>
