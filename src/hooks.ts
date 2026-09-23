@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api, NeedCluster, Need, Priority, FusionCandidate } from './api';
 
-export function useClusters(params?: { status?: string; priority_id?: number }) {
+export function useClusters(params?: { status?: string; priority_id?: number }, enabled = true) {
   const [clusters, setClusters] = useState<NeedCluster[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,8 +22,9 @@ export function useClusters(params?: { status?: string; priority_id?: number }) 
   };
 
   useEffect(() => {
+    if (!enabled) return;
     fetchClusters();
-  }, [JSON.stringify(params)]);
+  }, [JSON.stringify(params), enabled]);
 
   return { clusters, loading, error, refetch: fetchClusters };
 }
@@ -53,12 +54,13 @@ export function useClusterDetail(id: string) {
   return { cluster, loading, error, refetch: fetchDetail };
 }
 
-export function useLookups() {
+export function useLookups(enabled = true) {
   const [needs, setNeeds] = useState<Need[]>([]);
   const [priorities, setPriorities] = useState<Priority[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!enabled) return;
     Promise.all([api.getNeeds(), api.getPriorities()])
       .then(([needsData, prioritiesData]) => {
         setNeeds(needsData);
@@ -66,12 +68,12 @@ export function useLookups() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [enabled]);
 
   return { needs, priorities, loading };
 }
 
-export function useFusionCandidates() {
+export function useFusionCandidates(enabled = true) {
   const [candidates, setCandidates] = useState<FusionCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,8 +92,9 @@ export function useFusionCandidates() {
   };
 
   useEffect(() => {
+    if (!enabled) return;
     fetchCandidates();
-  }, []);
+  }, [enabled]);
 
   return { candidates, loading, error, refetch: fetchCandidates };
 }

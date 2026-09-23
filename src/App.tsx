@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api, NeedCluster, EvidenceItem, FusionCandidate } from './api';
-import { useClusters, useLookups, useFusionCandidates, useReport } from './hooks'
+import { useClusters, useLookups, useFusionCandidates, useReport, useClusterDetail } from './hooks'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -290,14 +290,16 @@ function FusionQueue({
   onResolved: () => void;
 }) {
   const [resolving, setResolving] = useState<string | null>(null);
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
 
   const handleResolve = async (id: string, action: 'MERGED' | 'KEPT_SEPARATE' | 'DISMISSED') => {
     try {
       setResolving(id);
+      setResolutionError(null);
       await api.resolveFusionCandidate(id, action);
       onResolved();
     } catch (e: any) {
-      alert(e.message || 'Failed to resolve fusion candidate');
+      setResolutionError(e.message || 'Failed to resolve fusion candidate');
     } finally {
       setResolving(null);
     }
@@ -422,6 +424,11 @@ function FusionQueue({
                 </div>
 
                 <div className="pt-4 border-t border-gray-100 flex items-center gap-3">
+                  {resolutionError && (
+                    <div className="basis-full text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      {resolutionError}
+                    </div>
+                  )}
                   <button 
                     onClick={() => handleResolve(c.id, 'MERGED')}
                     disabled={resolving === c.id}
@@ -603,8 +610,6 @@ function ClustersPage({ setPage, setSelectedCluster, clusters, loading }: { setP
 }
 
 // ─── Cluster Detail ───────────────────────────────────────────────────────────
-
-import { useClusterDetail } from './hooks';
 
 function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p: Page) => void }) {
   const { cluster, loading, error, refetch } = useClusterDetail(clusterId);
@@ -918,26 +923,51 @@ function RelationshipDiagram({ evidence, need }: { evidence: EvidenceItem[]; nee
 
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authAttempt, setAuthAttempt] = useState(0);
   useEffect(() => {
+    let cancelled = false;
+    setAuthError(null);
     if (!localStorage.getItem('nexus_token')) {
-      api.login().then(() => setAuthReady(true)).catch(console.error);
+      api.login()
+        .then(() => { if (!cancelled) setAuthReady(true) })
+        .catch(err => {
+          if (!cancelled) setAuthError(err instanceof Error ? err.message : 'Authentication failed');
+        });
     } else {
       setAuthReady(true);
     }
-  }, []);
+    return () => { cancelled = true };
+  }, [authAttempt]);
 
-  if (!authReady) return <div className="flex h-screen items-center justify-center text-sm text-gray-500">Authenticating...</div>;
-  const { candidates: fusionCandidates, loading: fusionLoading, error: fusionError, refetch: refetchFusion } = useFusionCandidates();
-  // Nexus Backend Integration (Ready for use when backend is live)
-  const { clusters: apiClusters, loading } = useClusters();
-  const { needs, priorities } = useLookups();
+  const { candidates: fusionCandidates, loading: fusionLoading, error: fusionError, refetch: refetchFusion } = useFusionCandidates(authReady);
+  const { clusters: apiClusters, loading } = useClusters(undefined, authReady);
+  const { needs, priorities } = useLookups(authReady);
+
+  if (!authReady) return (
+    <div className="flex min-h-screen items-center justify-center px-6 text-center">
+      <div>
+        {authError ? (
+          <>
+            <div className="text-sm font-medium text-red-700">Authentication failed</div>
+            <div className="text-xs text-red-600 mt-2">{authError}</div>
+            <button onClick={() => { setAuthReady(false); setAuthAttempt(attempt => attempt + 1) }} className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium">
+              Retry authentication
+            </button>
+          </>
+        ) : (
+          <div className="text-sm text-gray-500">Authenticating...</div>
+        )}
+      </div>
+    </div>
+  );
   
   useEffect(() => {
     if (apiClusters.length > 0) console.log('Nexus API Clusters loaded:', apiClusters);
   }, [apiClusters]);
 
   const [page, setPage] = useState<Page>('overview')
-  const [selectedCluster, setSelectedCluster] = useState('NEX-007')
+  const [selectedCluster, setSelectedCluster] = useState<string | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
@@ -1035,7 +1065,7 @@ export default function App() {
         {page === 'overview' && <Overview setPage={setPage} setSelectedCluster={setSelectedCluster} clusters={apiClusters} loading={loading} />}
         {page === 'fusion' && <FusionQueue candidates={fusionCandidates} loading={fusionLoading} error={fusionError} onResolved={refetchFusion} />}
         {page === 'clusters' && <ClustersPage setPage={setPage} setSelectedCluster={setSelectedCluster} clusters={apiClusters} loading={loading} />}
-        {page === 'cluster-detail' && <ClusterDetail clusterId={selectedCluster} setPage={setPage} />}
+        {page === 'cluster-detail' && selectedCluster && <ClusterDetail clusterId={selectedCluster} setPage={setPage} />}
       </main>
 
       {showImport && (
