@@ -5,17 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 
 // --- Types ---
 
-export interface Need {
-  id: number;
-  code: string;
-  name: string;
-}
 
-export interface Priority {
-  id: number;
-  code: string;
-  name: string;
-}
 
 export interface Report {
   id?: string;
@@ -190,16 +180,7 @@ export const api = {
     return res.json();
   },
 
-  // 3. Lookups
-  getNeeds: async (): Promise<Need[]> => {
-    const res = await fetchWithAuth(`${API_BASE_URL}/needs`);
-    return res.json();
-  },
 
-  getPriorities: async (): Promise<Priority[]> => {
-    const res = await fetchWithAuth(`${API_BASE_URL}/priorities`);
-    return res.json();
-  },
 
   // 4. Fusion
   getFusionCandidates: async (): Promise<FusionCandidate[]> => {

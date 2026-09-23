@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api, NeedCluster, Need, Priority, FusionCandidate } from './api';
+import { api, NeedCluster, FusionCandidate } from './api';
 
 export function useClusters(params?: { status?: string; priority_id?: number }) {
   const [clusters, setClusters] = useState<NeedCluster[]>([]);
@@ -53,23 +53,7 @@ export function useClusterDetail(id: string) {
   return { cluster, loading, error, refetch: fetchDetail };
 }
 
-export function useLookups() {
-  const [needs, setNeeds] = useState<Need[]>([]);
-  const [priorities, setPriorities] = useState<Priority[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    Promise.all([api.getNeeds(), api.getPriorities()])
-      .then(([needsData, prioritiesData]) => {
-        setNeeds(needsData);
-        setPriorities(prioritiesData);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  return { needs, priorities, loading };
-}
 
 export function useFusionCandidates() {
   const [candidates, setCandidates] = useState<FusionCandidate[]>([]);

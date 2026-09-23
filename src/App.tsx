@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { api, NeedCluster, EvidenceItem, FusionCandidate } from './api';
-import { useClusters, useLookups, useFusionCandidates } from './hooks'
+import { useClusters, useFusionCandidates } from './hooks'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Page = 'overview' | 'fusion' | 'clusters' | 'cluster-detail' | 'report-status'
-type FusionFilter = 'All' | 'Possible Match' | 'Duplicate' | 'Conflict'
+
 type VerifyState = 'pending' | 'confirmed' | 'rejected'
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -416,7 +416,9 @@ function FusionQueue({
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Linked Reports ({c.report_ids?.length || 0})</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {(c.report_ids || []).map((reportId) => (
-                      <ReportPreview key={reportId} id={reportId} label={reportId} />
+                      <div key={reportId} className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 font-mono">
+                        {reportId}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1138,7 +1140,6 @@ export default function App() {
   const { candidates: fusionCandidates, loading: fusionLoading, error: fusionError, refetch: refetchFusion } = useFusionCandidates();
   // Nexus Backend Integration (Ready for use when backend is live)
   const { clusters: apiClusters, loading } = useClusters();
-  const { needs, priorities } = useLookups();
   
   useEffect(() => {
     if (apiClusters.length > 0) console.log('Nexus API Clusters loaded:', apiClusters);
