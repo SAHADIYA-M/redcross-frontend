@@ -278,7 +278,17 @@ function Overview({ setPage, setSelectedCluster, clusters, loading }: { setPage:
 
 // ─── Fusion Queue ─────────────────────────────────────────────────────────────
 
-function FusionQueue({ candidates, onResolved }: { candidates: import('./api').FusionCandidate[], onResolved: () => void }) {
+function FusionQueue({
+  candidates,
+  loading,
+  error,
+  onResolved
+}: {
+  candidates: FusionCandidate[];
+  loading?: boolean;
+  error?: string | null;
+  onResolved: () => void;
+}) {
   const [resolving, setResolving] = useState<string | null>(null);
 
   const handleResolve = async (id: string, action: 'MERGED' | 'KEPT_SEPARATE' | 'DISMISSED') => {
@@ -287,84 +297,149 @@ function FusionQueue({ candidates, onResolved }: { candidates: import('./api').F
       await api.resolveFusionCandidate(id, action);
       onResolved();
     } catch (e: any) {
-      alert(e.message);
+      alert(e.message || 'Failed to resolve fusion candidate');
     } finally {
       setResolving(null);
     }
   };
 
-  const pending = candidates.filter(c => c.status === 'PENDING');
+  if (loading) {
+    return (
+      <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto w-full space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Fusion Queue</h1>
+          <p className="text-sm text-gray-400 mt-1">Review relationships detected between observations.</p>
+        </div>
+        <div className="bg-white rounded-xl border border-[#E4E7EC] p-16 text-center">
+          <div className="inline-block w-8 h-8 border-4 border-gray-200 border-t-red-600 rounded-full animate-spin mb-4" />
+          <div className="text-gray-700 font-medium text-sm">Loading fusion queue...</div>
+          <div className="text-xs text-gray-400 mt-1">Fetching duplicate and conflict candidates</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    const isAuthError = error.includes('401') || error.toLowerCase().includes('authentication') || error.toLowerCase().includes('unauthorized');
+    return (
+      <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto w-full space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Fusion Queue</h1>
+          <p className="text-sm text-gray-400 mt-1">Review relationships detected between observations.</p>
+        </div>
+
+        <div className={`p-6 rounded-xl border ${isAuthError ? 'bg-amber-50/80 border-amber-200 text-amber-900' : 'bg-red-50/80 border-red-200 text-red-900'}`}>
+          <div className="flex items-start gap-3">
+            <span className="text-2xl mt-0.5">{isAuthError ? '🔒' : '⚠️'}</span>
+            <div className="flex-1">
+              <h3 className="font-semibold text-base mb-1">
+                {isAuthError ? 'Authentication Required (401)' : 'Failed to Load Fusion Queue'}
+              </h3>
+              <p className="text-sm opacity-90 mb-3">
+                {isAuthError
+                  ? 'Unable to fetch fusion candidates due to missing or invalid authentication token. This component is correctly wired to live API endpoints, but blocked by the authentication dependency.'
+                  : error}
+              </p>
+              <div className="text-xs font-mono bg-black/5 p-2.5 rounded-lg mb-4 overflow-x-auto text-gray-800">
+                {error}
+              </div>
+              <button
+                onClick={onResolved}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm"
+              >
+                Retry Fetch
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const pending = (candidates || []).filter(c => c.status === 'PENDING');
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900">Fusion Queue</h1>
-        <p className="text-sm text-gray-400 mt-1">Review relationships detected between observations.</p>
+    <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto w-full space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Fusion Queue</h1>
+          <p className="text-sm text-gray-400 mt-1">Review relationships detected between observations.</p>
+        </div>
+        <div className="text-xs font-semibold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
+          {pending.length} {pending.length === 1 ? 'item' : 'items'} pending review
+        </div>
       </div>
 
       {pending.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">
-          No fusion candidates require review.
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-500">
+          <div className="text-3xl mb-2">✨</div>
+          <div className="font-medium text-gray-700 text-sm">Queue Clear</div>
+          <div className="text-xs text-gray-400 mt-1">No fusion candidates require review at this time.</div>
         </div>
       ) : (
         <div className="space-y-4">
           {pending.map((c) => (
-            <div key={c.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+            <div key={c.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:border-gray-300 transition-all">
+              <div className="px-5 py-3 border-b border-gray-200 flex justify-between items-center bg-gray-50/80">
                 <div className="flex items-center gap-3">
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${c.type === 'POSSIBLE_DUPLICATE' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                  <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${
+                    c.type === 'POSSIBLE_DUPLICATE'
+                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                      : 'bg-amber-100 text-amber-700 border border-amber-200'
+                  }`}>
                     {c.type === 'POSSIBLE_DUPLICATE' ? 'Possible Duplicate' : 'Possible Conflict'}
                   </span>
-                  <span className="text-sm text-gray-500">Cluster {c.cluster_id}</span>
+                  <span className="text-sm font-medium text-gray-700">Cluster {c.cluster_id}</span>
                 </div>
                 <span className="text-xs text-gray-400 font-mono">{c.id}</span>
               </div>
               
-              <div className="p-4 space-y-4">
+              <div className="p-5 space-y-4">
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-1">Reason:</h3>
-                  <p className="text-sm text-gray-600">{c.reason}</p>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Reason</h3>
+                  <p className="text-sm text-gray-800 font-medium">{c.reason}</p>
                 </div>
 
                 {c.similarity !== undefined && c.similarity !== null && (
-                  <div className="bg-gray-50 rounded p-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Similarity:</span>
-                      <span className="font-medium">{c.similarity.toFixed(2)} (Threshold: 0.60)</span>
+                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500 font-medium">Similarity Score</span>
+                      <span className="font-bold text-gray-800">{(c.similarity * 100).toFixed(1)}% (Threshold: 60%)</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-600 rounded-full" style={{ width: `${Math.min(100, c.similarity * 100)}%` }} />
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Reports:</h3>
-                  <div className="space-y-2">
-                    {c.report_ids.map((id) => (
-                      <div key={id} className="text-sm text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 font-mono">
-                        {id}
-                      </div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Linked Reports ({c.report_ids?.length || 0})</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(c.report_ids || []).map((reportId) => (
+                      <ReportPreview key={reportId} id={reportId} label={reportId} />
                     ))}
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-gray-100 flex gap-2">
+                <div className="pt-4 border-t border-gray-100 flex items-center gap-3">
                   <button 
                     onClick={() => handleResolve(c.id, 'MERGED')}
                     disabled={resolving === c.id}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
                   >
-                    Merge
+                    {resolving === c.id ? 'Processing...' : 'Merge Reports'}
                   </button>
                   <button 
                     onClick={() => handleResolve(c.id, 'KEPT_SEPARATE')}
                     disabled={resolving === c.id}
-                    className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200 disabled:opacity-50"
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-50 transition-colors border border-gray-200"
                   >
                     Keep Separate
                   </button>
                   <button 
                     onClick={() => handleResolve(c.id, 'DISMISSED')}
                     disabled={resolving === c.id}
-                    className="px-3 py-1.5 text-gray-500 hover:text-gray-700 rounded text-sm disabled:opacity-50"
+                    className="px-4 py-2 text-gray-500 hover:text-gray-700 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
                   >
                     Dismiss
                   </button>
@@ -532,28 +607,84 @@ function ClustersPage({ setPage, setSelectedCluster, clusters, loading }: { setP
 import { useClusterDetail } from './hooks';
 
 function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p: Page) => void }) {
-  const { cluster, loading, error } = useClusterDetail(clusterId);
-  const [verifyState, setVerifyState] = useState<VerifyState>('pending')
+  const { cluster, loading, error, refetch } = useClusterDetail(clusterId);
+  const [verifyState, setVerifyState] = useState<VerifyState>('pending');
 
-  if (loading) return <div className="px-6 lg:px-10 py-20 text-center text-gray-400 max-w-[1400px] mx-auto">Loading cluster details...</div>;
-  if (error || !cluster) return <div className="px-6 lg:px-10 py-20 text-center text-red-400 max-w-[1400px] mx-auto">{error || 'Cluster not found'}</div>;
+  if (loading) {
+    return (
+      <div className="px-6 lg:px-10 py-20 text-center max-w-[1400px] mx-auto">
+        <div className="inline-block w-8 h-8 border-4 border-gray-200 border-t-red-600 rounded-full animate-spin mb-4" />
+        <div className="text-gray-700 font-medium text-sm">Loading cluster details...</div>
+        <div className="text-xs text-gray-400 mt-1">Fetching cluster {clusterId}</div>
+      </div>
+    );
+  }
+
+  if (error || !cluster) {
+    const isAuthError = error?.includes('401') || error?.toLowerCase().includes('authentication') || error?.toLowerCase().includes('unauthorized');
+    return (
+      <div className="px-6 lg:px-10 py-12 max-w-[800px] mx-auto w-full">
+        <button onClick={() => setPage('clusters')} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-6 transition-colors">
+          ← Back to clusters
+        </button>
+        <div className={`p-6 rounded-xl border ${isAuthError ? 'bg-amber-50/80 border-amber-200 text-amber-900' : 'bg-red-50/80 border-red-200 text-red-900'}`}>
+          <div className="flex items-start gap-3">
+            <span className="text-2xl mt-0.5">{isAuthError ? '🔒' : '⚠️'}</span>
+            <div className="flex-1">
+              <h3 className="font-semibold text-base mb-1">
+                {isAuthError ? 'Authentication Required (401)' : 'Failed to Load Cluster'}
+              </h3>
+              <p className="text-sm opacity-90 mb-3">
+                {isAuthError
+                  ? `Unable to fetch details for cluster "${clusterId}" due to missing or invalid authentication credentials. This component is correctly wired to live API endpoints, but blocked by the authentication dependency.`
+                  : error || `Cluster "${clusterId}" could not be found.`}
+              </p>
+              {error && (
+                <div className="text-xs font-mono bg-black/5 p-2.5 rounded-lg mb-4 overflow-x-auto text-gray-800">
+                  {error}
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => refetch()}
+                  className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm"
+                >
+                  Retry Fetch
+                </button>
+                <button
+                  onClick={() => setPage('clusters')}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Return to Clusters
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const fusionReasons = cluster.fusionReasons || [];
+  const evidence = cluster.evidence || [];
+  const timeline = cluster.timeline || [];
 
   return (
     <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto w-full">
       {/* Back */}
-      <button onClick={() => setPage('clusters')} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-6 transition-colors">
+      <button onClick={() => setPage('clusters')} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-6 transition-colors font-medium">
         ← Back to clusters
       </button>
 
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 leading-tight">{cluster.need.toUpperCase()}</h1>
-          <div className="text-sm text-gray-500 mt-1">{cluster.location}</div>
+          <h1 className="text-2xl font-bold text-gray-900 leading-tight">{(cluster.need || 'UNNAMED NEED').toUpperCase()}</h1>
+          <div className="text-sm text-gray-500 mt-1">{cluster.location || 'Unknown location'}</div>
           <div className="text-xs font-mono text-gray-400 mt-0.5">Cluster {cluster.id}</div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <PriorityTag p={cluster.priority} />
+          <PriorityTag p={cluster.priority || 'MEDIUM'} />
           {cluster.status === 'REVIEW' && (
             <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-medium">⚠ Needs verification</span>
           )}
@@ -572,12 +703,12 @@ function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p:
           {/* Situation */}
           <div className="border border-[#E4E7EC] bg-white rounded-xl px-6 py-5">
             <SectionLabel>Situation</SectionLabel>
-            <p className="text-sm text-gray-600 leading-relaxed mb-5">{cluster.summary}</p>
+            <p className="text-sm text-gray-600 leading-relaxed mb-5">{cluster.summary || 'No summary available.'}</p>
             <div className="grid grid-cols-3 gap-4 border-t border-[#E4E7EC] pt-4">
               {[
-                { label: 'Estimated affected', value: cluster.affected, note: 'AI estimate · unverified' },
-                { label: 'First reported', value: cluster.firstSeen },
-                { label: 'Latest update', value: cluster.lastUpdate },
+                { label: 'Estimated affected', value: cluster.affected || 'Unknown', note: 'AI estimate · unverified' },
+                { label: 'First reported', value: cluster.firstSeen || 'N/A' },
+                { label: 'Latest update', value: cluster.lastUpdate || 'N/A' },
               ].map(item => (
                 <div key={item.label}>
                   <div className="text-xs text-gray-400">{item.label}</div>
@@ -591,48 +722,56 @@ function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p:
           {/* Fusion reasoning */}
           <div className="border border-[#E4E7EC] bg-white rounded-xl px-6 py-5">
             <SectionLabel>Why Nexus grouped these reports</SectionLabel>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 mb-5">
-              {cluster.fusionReasons.map(r => (
-                <div key={r} className="flex items-center gap-2 text-sm text-gray-600">
-                  <span className="text-emerald-500 font-bold shrink-0">✓</span> {r}
-                </div>
-              ))}
-            </div>
+            {fusionReasons.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 mb-5">
+                {fusionReasons.map(r => (
+                  <div key={r} className="flex items-center gap-2 text-sm text-gray-600">
+                    <span className="text-emerald-500 font-bold shrink-0">✓</span> {r}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-400 italic mb-5">No explicit fusion reasons provided.</div>
+            )}
             <div className="border-t border-[#E4E7EC] pt-4">
               <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
                 <span>Model confidence</span>
-                <span className="font-bold text-gray-700">{cluster.confidence}%</span>
+                <span className="font-bold text-gray-700">{cluster.confidence || 0}%</span>
               </div>
               <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-gray-700 rounded-full" style={{ width: `${cluster.confidence}%` }} />
+                <div className="h-full bg-gray-700 rounded-full" style={{ width: `${cluster.confidence || 0}%` }} />
               </div>
             </div>
           </div>
 
           {/* Evidence */}
           <div className="border border-[#E4E7EC] bg-white rounded-xl px-6 py-5">
-            <SectionLabel>{cluster.observations} observations · {cluster.sources} sources{cluster.photos > 0 ? ` · ${cluster.photos} photo` : ''}</SectionLabel>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {cluster.evidence.map(e => (
-                <div key={e.id} className={`border rounded-xl px-4 py-3.5 ${e.role === 'conflicts' ? 'border-amber-200 bg-amber-50' : 'border-[#E4E7EC] bg-white'}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-mono font-semibold text-gray-400">{e.id}</span>
-                    <span className="text-xs text-gray-400">{e.time}</span>
+            <SectionLabel>{cluster.observations || 0} observations · {cluster.sources || 0} sources{cluster.photos ? ` · ${cluster.photos} photo` : ''}</SectionLabel>
+            {evidence.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {evidence.map(e => (
+                  <div key={e.id} className={`border rounded-xl px-4 py-3.5 ${e.role === 'conflicts' ? 'border-amber-200 bg-amber-50' : 'border-[#E4E7EC] bg-white'}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-mono font-semibold text-gray-400">{e.id}</span>
+                      <span className="text-xs text-gray-400">{e.time}</span>
+                    </div>
+                    <div className="text-xs text-gray-400 mb-1.5">{e.author}</div>
+                    <div className="text-sm text-gray-700 italic leading-relaxed">{e.text}</div>
+                    <div className={`mt-2 text-xs font-medium ${e.role === 'conflicts' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      {e.role === 'conflicts' ? '⚠ Conflicts with cluster' : '✓ Supports cluster'}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-400 mb-1.5">{e.author}</div>
-                  <div className="text-sm text-gray-700 italic leading-relaxed">{e.text}</div>
-                  <div className={`mt-2 text-xs font-medium ${e.role === 'conflicts' ? 'text-amber-600' : 'text-emerald-600'}`}>
-                    {e.role === 'conflicts' ? '⚠ Conflicts with cluster' : '✓ Supports cluster'}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-400 italic">No evidence items available for this cluster.</div>
+            )}
           </div>
 
           {/* Relationship diagram */}
           <div className="border border-[#E4E7EC] bg-white rounded-xl px-6 py-5">
             <SectionLabel>Evidence relationships</SectionLabel>
-            <RelationshipDiagram evidence={cluster.evidence} need={cluster.need} />
+            <RelationshipDiagram evidence={evidence} need={cluster.need || 'Need'} />
           </div>
         </div>
 
@@ -642,20 +781,24 @@ function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p:
           {/* Timeline */}
           <div className="border border-[#E4E7EC] bg-white rounded-xl px-5 py-5">
             <SectionLabel>Situation timeline</SectionLabel>
-            <div className="relative pl-5">
-              <div className="absolute left-1.5 top-0 bottom-0 w-px bg-[#E4E7EC]" />
-              {cluster.timeline.map((item, i) => {
-                const color = item.level === 'high' ? 'bg-red-500' : item.level === 'conflict' ? 'bg-amber-500' : item.level === 'photo' ? 'bg-blue-400' : 'bg-orange-400'
-                return (
-                  <div key={i} className="relative mb-5 last:mb-0">
-                    <div className={`absolute -left-[17px] top-1 w-2 h-2 rounded-full ${color}`} />
-                    <div className="text-xs font-mono text-gray-400 mb-0.5">{item.time}</div>
-                    <div className="text-sm text-gray-700 font-medium">{item.text}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">{item.id}</div>
-                  </div>
-                )
-              })}
-            </div>
+            {timeline.length > 0 ? (
+              <div className="relative pl-5">
+                <div className="absolute left-1.5 top-0 bottom-0 w-px bg-[#E4E7EC]" />
+                {timeline.map((item, i) => {
+                  const color = item.level === 'high' ? 'bg-red-500' : item.level === 'conflict' ? 'bg-amber-500' : item.level === 'photo' ? 'bg-blue-400' : 'bg-orange-400'
+                  return (
+                    <div key={i} className="relative mb-5 last:mb-0">
+                      <div className={`absolute -left-[17px] top-1 w-2 h-2 rounded-full ${color}`} />
+                      <div className="text-xs font-mono text-gray-400 mb-0.5">{item.time}</div>
+                      <div className="text-sm text-gray-700 font-medium">{item.text}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{item.id}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-400 italic">No timeline items reported.</div>
+            )}
           </div>
 
           {/* Conflict panel */}
@@ -701,7 +844,7 @@ function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p:
             ) : (
               <div>
                 <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-                  Nexus assessment: These observations likely represent the same underlying {cluster.need.toLowerCase()}.
+                  Nexus assessment: These observations likely represent the same underlying {(cluster.need || 'need').toLowerCase()}.
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -733,20 +876,21 @@ function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p:
 }
 
 function RelationshipDiagram({ evidence, need }: { evidence: EvidenceItem[]; need: string }) {
-  const supporters = evidence.filter(e => e.role === 'supports')
-  const conflicts = evidence.filter(e => e.role === 'conflicts')
+  const safeEvidence = evidence || [];
+  const supporters = safeEvidence.filter(e => e.role === 'supports');
+  const conflicts = safeEvidence.filter(e => e.role === 'conflicts');
   return (
     <div className="border border-[#E4E7EC] rounded-xl bg-[#FAFAFA] p-6 overflow-x-auto">
       <div className="flex flex-col items-center gap-5 min-w-[360px]">
-        <div className="border-2 border-gray-700 rounded-xl px-6 py-3 bg-white text-center">
-          <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">{need.split(' ').slice(0, 2).join(' ')}</div>
+        <div className="border-2 border-gray-700 rounded-xl px-6 py-3 bg-white text-center shadow-sm">
+          <div className="text-xs font-bold text-gray-700 uppercase tracking-wider">{need.split(' ').slice(0, 2).join(' ')}</div>
           <div className="text-xs text-gray-400 mt-0.5">Need cluster</div>
         </div>
         <div className="flex flex-wrap items-start justify-center gap-3 w-full">
           {supporters.map(e => (
             <div key={e.id} className="flex flex-col items-center gap-1.5">
-              <div className="text-xs text-emerald-500 font-medium">supports ↑</div>
-              <div className="border border-emerald-200 bg-emerald-50 rounded-lg px-3 py-2 text-center">
+              <div className="text-xs text-emerald-600 font-semibold">supports ↑</div>
+              <div className="border border-emerald-200 bg-emerald-50/70 rounded-lg px-3 py-2 text-center">
                 <div className="text-xs font-mono font-bold text-emerald-700">{e.id}</div>
                 <div className="text-xs text-gray-500 mt-0.5">{e.time}</div>
               </div>
@@ -754,13 +898,16 @@ function RelationshipDiagram({ evidence, need }: { evidence: EvidenceItem[]; nee
           ))}
           {conflicts.map(e => (
             <div key={e.id} className="flex flex-col items-center gap-1.5">
-              <div className="text-xs text-amber-500 font-medium">⚠ conflicts</div>
-              <div className="border border-amber-300 bg-amber-50 rounded-lg px-3 py-2 text-center">
+              <div className="text-xs text-amber-600 font-semibold">⚠ conflicts</div>
+              <div className="border border-amber-300 bg-amber-50/70 rounded-lg px-3 py-2 text-center">
                 <div className="text-xs font-mono font-bold text-amber-700">{e.id}</div>
                 <div className="text-xs text-gray-500 mt-0.5">{e.time}</div>
               </div>
             </div>
           ))}
+          {safeEvidence.length === 0 && (
+            <div className="text-xs text-gray-400 italic">No linked evidence relationships available</div>
+          )}
         </div>
       </div>
     </div>
@@ -780,7 +927,7 @@ export default function App() {
   }, []);
 
   if (!authReady) return <div className="flex h-screen items-center justify-center text-sm text-gray-500">Authenticating...</div>;
-  const { candidates: fusionCandidates, refetch: refetchFusion } = useFusionCandidates();
+  const { candidates: fusionCandidates, loading: fusionLoading, error: fusionError, refetch: refetchFusion } = useFusionCandidates();
   // Nexus Backend Integration (Ready for use when backend is live)
   const { clusters: apiClusters, loading } = useClusters();
   const { needs, priorities } = useLookups();
@@ -794,7 +941,7 @@ export default function App() {
   const [showImport, setShowImport] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
-  const pendingFusion = fusionCandidates.filter(c => c.status === "PENDING").length
+  const pendingFusion = (fusionCandidates || []).filter(c => c.status === "PENDING").length
   const clusterCount = apiClusters.length
 
   const navItems = [
@@ -866,7 +1013,7 @@ export default function App() {
 
         {/* Mobile dropdown nav */}
         {mobileNavOpen && (
-          <div className="sm:hidden border-t border-[#E4E7EC] bg-white px-6 py-3 space-y-1">
+          <div className="sm:hidden border-t border-[#E4E7EC] bg-[#FAFAFA] px-6 py-3 space-y-1">
             {navItems.map(item => (
               <button
                 key={item.id}
@@ -886,7 +1033,7 @@ export default function App() {
       {/* Page */}
       <main className="overflow-x-hidden">
         {page === 'overview' && <Overview setPage={setPage} setSelectedCluster={setSelectedCluster} clusters={apiClusters} loading={loading} />}
-        {page === 'fusion' && <FusionQueue candidates={fusionCandidates} onResolved={refetchFusion} />}
+        {page === 'fusion' && <FusionQueue candidates={fusionCandidates} loading={fusionLoading} error={fusionError} onResolved={refetchFusion} />}
         {page === 'clusters' && <ClustersPage setPage={setPage} setSelectedCluster={setSelectedCluster} clusters={apiClusters} loading={loading} />}
         {page === 'cluster-detail' && <ClusterDetail clusterId={selectedCluster} setPage={setPage} />}
       </main>
