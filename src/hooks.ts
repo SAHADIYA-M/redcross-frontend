@@ -96,17 +96,6 @@ export function useFusionCandidates() {
   return { candidates, loading, error, refetch: fetchCandidates };
 }
 
-export function useReport(id: string) {
-  const [report, setReport] = useState<import('./api').Report | null>(null);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    api.getReportStatus(id)
-      .then(res => setReport(res))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [id]);
-  return { report, loading };
-}
+
+
 
