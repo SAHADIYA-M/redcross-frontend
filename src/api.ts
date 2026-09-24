@@ -1,5 +1,7 @@
 // API Client for RedCross Nexus
-// Updated to match the FastAPI backend architecture
+// The backend API is unauthenticated: requests carry no Authorization
+// header and no token is stored. Error responses keep their generic message
+// (404 for missing resources, 422 for validation, 5xx for server faults).
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -87,38 +89,29 @@ export interface PaginatedResponse<T> {
 }
 
 // --- Fetch Wrapper ---
-async function fetchWithAuth(url: string | URL, options: RequestInit = {}) {
-  const token = localStorage.getItem('nexus_token');
-  const headers = new Headers(options.headers || {});
-  
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  
+async function request<T>(url: string | URL, options: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(url, { ...options, headers });
+    res = await fetch(url, options);
   } catch (err) {
     throw new Error('Network failure: Unable to reach backend API');
   }
-  
+
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try {
       const errData = await res.json();
       if (errData.detail) {
-        msg = Array.isArray(errData.detail) 
-          ? errData.detail.map((e: any) => `${e.loc.join('.')}: ${e.msg}`).join(', ') 
+        msg = Array.isArray(errData.detail)
+          ? errData.detail.map((e: any) => `${e.loc.join('.')}: ${e.msg}`).join(', ')
           : errData.detail;
       }
     } catch (e) {
       // JSON parse failed
     }
-    
-    if (res.status === 401) {
-      throw new Error(`Authentication required (401). ${msg}`);
-    } else if (res.status === 403) {
-      throw new Error(`Permission denied (403). You lack the required role. ${msg}`);
+
+    if (res.status === 404) {
+      throw new Error(`Not Found (404). ${msg}`);
     } else if (res.status === 422) {
       throw new Error(`Validation Error (422): ${msg}`);
     } else if (res.status >= 500) {
@@ -126,74 +119,43 @@ async function fetchWithAuth(url: string | URL, options: RequestInit = {}) {
     }
     throw new Error(msg);
   }
-  return res;
+  return res.json() as Promise<T>;
 }
 
 // --- API Methods ---
 
 export const api = {
-  login: async (
-    username = import.meta.env.VITE_DEV_ADMIN_USERNAME || 'dev_admin',
-    password = import.meta.env.VITE_DEV_ADMIN_PASSWORD || 'dev_admin_password'
-  ) => {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    
-    if (!res.ok) throw new Error('Login failed');
-    const data = await res.json();
-    localStorage.setItem('nexus_token', data.access_token);
-    return data;
-  },
-
   // 1. Reports
-  submitReport: async (data: Partial<Report>): Promise<Report> => {
-    const res = await fetchWithAuth(`${API_BASE_URL}/reports`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return res.json();
-  },
+  submitReport: (data: Partial<Report>): Promise<Report> => request<Report>(`${API_BASE_URL}/reports`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }),
 
-  getReportStatus: async (id: string): Promise<Report> => {
-    const res = await fetchWithAuth(`${API_BASE_URL}/reports/${id}`);
-    return res.json();
-  },
+  getReportStatus: (id: string): Promise<Report> => request<Report>(`${API_BASE_URL}/reports/${id}`),
 
   // 2. Clusters
-  getClusters: async (params?: Record<string, string | number>): Promise<PaginatedResponse<NeedCluster>> => {
+  getClusters: (params?: Record<string, string | number>): Promise<PaginatedResponse<NeedCluster>> => {
     const url = new URL(`${API_BASE_URL}/clusters`);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined) url.searchParams.append(key, String(value));
       });
     }
-    const res = await fetchWithAuth(url.toString());
-    return res.json();
+    return request<PaginatedResponse<NeedCluster>>(url.toString());
   },
 
-  getClusterDetail: async (id: string): Promise<NeedCluster> => {
-    const res = await fetchWithAuth(`${API_BASE_URL}/clusters/${id}`);
-    return res.json();
-  },
+  getClusterDetail: (id: string): Promise<NeedCluster> => request<NeedCluster>(`${API_BASE_URL}/clusters/${id}`),
 
 
 
   // 4. Fusion
-  getFusionCandidates: async (): Promise<FusionCandidate[]> => {
-    const res = await fetchWithAuth(`${API_BASE_URL}/fusion`);
-    return res.json();
-  },
+  getFusionCandidates: (): Promise<FusionCandidate[]> => request<FusionCandidate[]>(`${API_BASE_URL}/fusion`),
 
-  resolveFusionCandidate: async (id: string, action: 'MERGED' | 'KEPT_SEPARATE' | 'DISMISSED'): Promise<FusionCandidate> => {
-    const res = await fetchWithAuth(`${API_BASE_URL}/fusion/${id}/resolve`, {
+  resolveFusionCandidate: (id: string, action: 'MERGED' | 'KEPT_SEPARATE' | 'DISMISSED'): Promise<FusionCandidate> =>
+    request<FusionCandidate>(`${API_BASE_URL}/fusion/${id}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action }),
-    });
-    return res.json();
-  }
+    }),
 };

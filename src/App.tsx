@@ -320,7 +320,6 @@ function FusionQueue({
   }
 
   if (error) {
-    const isAuthError = error.includes('401') || error.toLowerCase().includes('authentication') || error.toLowerCase().includes('unauthorized');
     return (
       <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto w-full space-y-6">
         <div>
@@ -328,18 +327,12 @@ function FusionQueue({
           <p className="text-sm text-gray-400 mt-1">Review relationships detected between observations.</p>
         </div>
 
-        <div className={`p-6 rounded-xl border ${isAuthError ? 'bg-amber-50/80 border-amber-200 text-amber-900' : 'bg-red-50/80 border-red-200 text-red-900'}`}>
+        <div className="p-6 rounded-xl border bg-red-50/80 border-red-200 text-red-900">
           <div className="flex items-start gap-3">
-            <span className="text-2xl mt-0.5">{isAuthError ? '🔒' : '⚠️'}</span>
+            <span className="text-2xl mt-0.5">⚠️</span>
             <div className="flex-1">
-              <h3 className="font-semibold text-base mb-1">
-                {isAuthError ? 'Authentication Required (401)' : 'Failed to Load Fusion Queue'}
-              </h3>
-              <p className="text-sm opacity-90 mb-3">
-                {isAuthError
-                  ? 'Unable to fetch fusion candidates due to missing or invalid authentication token. This component is correctly wired to live API endpoints, but blocked by the authentication dependency.'
-                  : error}
-              </p>
+              <h3 className="font-semibold text-base mb-1">Failed to Load Fusion Queue</h3>
+              <p className="text-sm opacity-90 mb-3">{error}</p>
               <div className="text-xs font-mono bg-black/5 p-2.5 rounded-lg mb-4 overflow-x-auto text-gray-800">
                 {error}
               </div>
@@ -490,8 +483,6 @@ function SubmitReportModal({ onClose }: { onClose: () => void }) {
     } catch (err: any) {
       if (err.message?.includes('422')) {
         setApiError('Validation failed. Please check the fields.');
-      } else if (err.message?.includes('401') || err.message?.includes('Login failed') || err.message?.includes('Unauthorized')) {
-        setApiError('Authentication required/session expired. Please log in again.');
       } else {
         setApiError(err.message || 'Failed to submit report');
       }
@@ -631,8 +622,6 @@ function ReportStatusPage() {
     } catch (err: any) {
       if (err.message?.includes('404')) {
         setError('Report not found. Please check the ID and try again.');
-      } else if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
-        setError('Authentication required/session expired. Please log in again.');
       } else {
         setError(err.message || 'Failed to fetch report status');
       }
@@ -831,23 +820,18 @@ function ClusterDetail({ clusterId, setPage }: { clusterId: string; setPage: (p:
   }
 
   if (error || !cluster) {
-    const isAuthError = error?.includes('401') || error?.toLowerCase().includes('authentication') || error?.toLowerCase().includes('unauthorized');
     return (
       <div className="px-6 lg:px-10 py-12 max-w-[800px] mx-auto w-full">
         <button onClick={() => setPage('clusters')} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-6 transition-colors">
           ← Back to clusters
         </button>
-        <div className={`p-6 rounded-xl border ${isAuthError ? 'bg-amber-50/80 border-amber-200 text-amber-900' : 'bg-red-50/80 border-red-200 text-red-900'}`}>
+        <div className="p-6 rounded-xl border bg-red-50/80 border-red-200 text-red-900">
           <div className="flex items-start gap-3">
-            <span className="text-2xl mt-0.5">{isAuthError ? '🔒' : '⚠️'}</span>
+            <span className="text-2xl mt-0.5">⚠️</span>
             <div className="flex-1">
-              <h3 className="font-semibold text-base mb-1">
-                {isAuthError ? 'Authentication Required (401)' : 'Failed to Load Cluster'}
-              </h3>
+              <h3 className="font-semibold text-base mb-1">Failed to Load Cluster</h3>
               <p className="text-sm opacity-90 mb-3">
-                {isAuthError
-                  ? `Unable to fetch details for cluster "${clusterId}" due to missing or invalid authentication credentials. This component is correctly wired to live API endpoints, but blocked by the authentication dependency.`
-                  : error || `Cluster "${clusterId}" could not be found.`}
+                {error || `Cluster "${clusterId}" could not be found.`}
               </p>
               {error && (
                 <div className="text-xs font-mono bg-black/5 p-2.5 rounded-lg mb-4 overflow-x-auto text-gray-800">
@@ -1127,16 +1111,6 @@ function RelationshipDiagram({ evidence, need }: { evidence: EvidenceItem[]; nee
 // ─── Shell ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [authReady, setAuthReady] = useState(false);
-  useEffect(() => {
-    if (!localStorage.getItem('nexus_token')) {
-      api.login().then(() => setAuthReady(true)).catch(console.error);
-    } else {
-      setAuthReady(true);
-    }
-  }, []);
-
-  if (!authReady) return <div className="flex h-screen items-center justify-center text-sm text-gray-500">Authenticating...</div>;
   const { candidates: fusionCandidates, loading: fusionLoading, error: fusionError, refetch: refetchFusion } = useFusionCandidates();
   // Nexus Backend Integration (Ready for use when backend is live)
   const { clusters: apiClusters, loading } = useClusters();
